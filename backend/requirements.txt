@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+psycopg[binary,pool]
+pgvector
+pydantic-settings
+tree-sitter
+tree-sitter-python
+sentence-transformers
+GitPython

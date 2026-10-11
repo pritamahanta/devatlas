@@ -3,7 +3,7 @@ uvicorn[standard]
 psycopg[binary,pool]
 pgvector
 pydantic-settings
-tree-sitter
-tree-sitter-python
-sentence-transformers
+tree-sitter>=0.22
+tree-sitter-python>=0.21
 GitPython
+pytest

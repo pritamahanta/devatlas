@@ -1,0 +1,5 @@
+# Needed from Step 4 (embeddings). Heavy: install CPU-only torch FIRST (~200 MB)
+# instead of the default CUDA build (several GB):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-embed.txt
+sentence-transformers

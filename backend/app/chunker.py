@@ -30,6 +30,7 @@ class Chunk:
     parent: str | None        # enclosing class qualname, e.g. Outer.Inner
     content: str              # raw source, so line ranges match the file
     calls: list[str] = field(default_factory=list)  # callee names (for refs)
+    part: int = 0             # >0 for continuation windows of an oversized chunk
 
     def embed_text(self) -> str:
         """Text sent to the embedding model: raw code plus a context header."""
@@ -82,10 +83,10 @@ def _make(lines: list[str], path: str, s: int, e: int, kind: str,
           symbol: str | None, parent: str | None, calls: list[str]) -> list[Chunk]:
     """Build a chunk, splitting into windows if it exceeds MAX_CHUNK_LINES."""
     out: list[Chunk] = []
-    for ws in range(s, e + 1, MAX_CHUNK_LINES):
+    for i, ws in enumerate(range(s, e + 1, MAX_CHUNK_LINES)):
         we = min(ws + MAX_CHUNK_LINES - 1, e)
         out.append(Chunk(path, ws, we, kind, symbol, parent,
-                         "\n".join(lines[ws - 1:we]), calls))
+                         "\n".join(lines[ws - 1:we]), calls, part=i))
     return out
 
 

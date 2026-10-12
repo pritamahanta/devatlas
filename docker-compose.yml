@@ -10,6 +10,42 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devatlas -d devatlas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The two services below are behind the "app" profile, so a plain
+  # `docker compose up -d` still starts only the database (local dev workflow).
+  # Full stack:  docker compose --profile app up -d --build   ->  http://localhost:8080
+  backend:
+    profiles: ["app"]
+    build: ./backend
+    env_file:
+      - path: ./backend/.env  # LLM keys; optional so the stack still starts without it
+        required: false
+    environment:
+      DATABASE_URL: postgresql://devatlas:devatlas@db:5432/devatlas
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  frontend:
+    profiles: ["app"]
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
 
 volumes:
   pgdata:

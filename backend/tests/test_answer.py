@@ -154,6 +154,20 @@ def test_gemini_client(monkeypatch):
         GeminiLLM("KEY", "m").complete("s", "u")
 
 
+def test_gemini_thinking_disabled_only_for_flash(monkeypatch):
+    seen = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        seen.append(json["generationConfig"])
+        return _resp(200, {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    GeminiLLM("K", "gemini-2.5-flash").complete("s", "u")
+    GeminiLLM("K", "gemini-2.5-pro").complete("s", "u")
+    assert seen[0]["thinkingConfig"] == {"thinkingBudget": 0}
+    assert "thinkingConfig" not in seen[1]
+
+
 def test_anthropic_client(monkeypatch):
     seen = {}
 

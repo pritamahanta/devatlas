@@ -7,7 +7,7 @@ import httpx
 
 from .config import settings
 
-DEFAULT_MODELS = {"gemini": "gemini-2.5-flash", "anthropic": "claude-sonnet-5-5"}
+DEFAULT_MODELS = {"gemini": "gemini-3.8-flash", "anthropic": "claude-sonnet-5-5"}
 
 
 class LLMError(RuntimeError):
@@ -35,9 +35,15 @@ class GeminiLLM:
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": settings.max_output_tokens},
         }
+        # 2.5-flash "thinks" by default: thinking tokens count against maxOutputTokens and add
+        # latency. This task is retrieval-grounded Q&A, so turn it off (budget 0 is only valid
+        # for the flash family; 2.5-pro cannot disable thinking).
+        if self.model.startswith("gemini-2.5-flash") and settings.gemini_thinking_budget >= 0:
+            body["generationConfig"]["thinkingConfig"] = {
+                "thinkingBudget": settings.gemini_thinking_budget}
         try:
             r = httpx.post(url, json=body, headers={"x-goog-api-key": self.api_key},
-                           timeout=settings.llm_timeout_s)
+                           timeout=httpx.Timeout(settings.llm_timeout_s, connect=10.0))
         except httpx.HTTPError as e:
             raise LLMError(f"gemini request failed: {e}") from e
         if r.status_code >= 400:

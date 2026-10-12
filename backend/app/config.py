@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     max_context_chars: int = 24000      # prompt budget for retrieved excerpts
     max_output_tokens: int = 2048
     llm_timeout_s: float = 60.0
+    gemini_thinking_budget: int = 0     # gemini-2.5-flash only; 0 = off, -1 = don't send the field
 
 
 settings = Settings()

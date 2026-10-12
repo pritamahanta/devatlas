@@ -29,7 +29,8 @@ CREATE TABLE chunks (
     content     TEXT NOT NULL,
     embedding   vector(384),
     tsv         tsvector GENERATED ALWAYS AS (
-                  to_tsvector('simple', coalesce(symbol,'') || ' ' || content)
+                  to_tsvector('simple',
+                    regexp_replace(coalesce(symbol,'') || ' ' || content, '[._/]', ' ', 'g'))
                 ) STORED
 );
 

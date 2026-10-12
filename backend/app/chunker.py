@@ -20,6 +20,14 @@ MAX_CHUNK_LINES = 150  # oversized functions are split into windows of this size
 MIN_MODULE_LINES = 2   # skip module gaps with fewer non-blank lines
 
 
+def build_embed_text(path: str, kind: str, parent: str | None,
+                     symbol: str | None, content: str) -> str:
+    """Context header + raw content. Shared by ingestion and the embed step."""
+    qual = f"{parent}.{symbol}" if parent and symbol else (symbol or "")
+    header = f"# file: {path}\n# {kind}: {qual}".rstrip()
+    return f"{header}\n{content}"
+
+
 @dataclass
 class Chunk:
     path: str
@@ -34,9 +42,7 @@ class Chunk:
 
     def embed_text(self) -> str:
         """Text sent to the embedding model: raw code plus a context header."""
-        qual = f"{self.parent}.{self.symbol}" if self.parent and self.symbol else (self.symbol or "")
-        header = f"# file: {self.path}\n# {self.kind}: {qual}".rstrip()
-        return f"{header}\n{self.content}"
+        return build_embed_text(self.path, self.kind, self.parent, self.symbol, self.content)
 
 
 def _calls_in(node: Node) -> list[str]:

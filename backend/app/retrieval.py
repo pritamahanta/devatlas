@@ -86,12 +86,20 @@ def keyword_terms(query: str, limit: int = 24) -> list[str]:
 
 def vector_search(conn, repo_id: int, query: str, n: int) -> list[int]:
     qvec = get_embedder().embed_query(query)
+    sql = ("SELECT id FROM chunks WHERE repo_id = %s AND embedding IS NOT NULL "
+           "ORDER BY {order} LIMIT %s")
     conn.execute(f"SET LOCAL hnsw.ef_search = {int(settings.hnsw_ef_search)}")
-    rows = conn.execute(
-        "SELECT id FROM chunks WHERE repo_id = %s AND embedding IS NOT NULL "
-        "ORDER BY embedding <=> %s LIMIT %s", (repo_id, qvec, n)
-    ).fetchall()
-    return [r[0] for r in rows]
+    ids = [r[0] for r in conn.execute(sql.format(order="embedding <=> %s"), (repo_id, qvec, n)).fetchall()]
+    if len(ids) < n:
+        # HNSW applies the repo filter AFTER scanning ef_search candidates across
+        # ALL repos, so with several repos in one table it can under-fill (even
+        # return nothing). Re-run as an exact scan; it is cheap at this scale and
+        # only triggers when the index could not fill the request. The "+ 0" makes
+        # the ORDER BY expression un-indexable, so the planner cannot pick HNSW.
+        # (For repos with fewer than n chunks this always runs, which is fine.)
+        ids = [r[0] for r in conn.execute(
+            sql.format(order="(embedding <=> %s) + 0"), (repo_id, qvec, n)).fetchall()]
+    return ids
 
 
 def keyword_search(conn, repo_id: int, query: str, n: int) -> list[int]:
@@ -134,9 +142,9 @@ def search(conn, repo_id: int, query: str, k: int = 8, mode: str = "hybrid") -> 
         raise ValueError(f"mode must be one of {MODES}")
     n = settings.candidates_per_retriever
     lists: dict[str, list[int]] = {}
-    if mode in ("hybrid", "vector"):
+    if mode in ("hybrid", "vector", "vector+keyword"):
         lists["vector"] = vector_search(conn, repo_id, query, n)
-    if mode in ("hybrid", "keyword"):
+    if mode in ("hybrid", "keyword", "vector+keyword"):
         lists["keyword"] = keyword_search(conn, repo_id, query, n)
     if mode in ("hybrid", "symbol"):
         lists["symbol"] = symbol_search(conn, repo_id, query, n)

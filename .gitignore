@@ -5,3 +5,6 @@ __pycache__/
 .idea/
 .vscode/
 repos_cache/
+node_modules/
+frontend/dist/
+*.patch

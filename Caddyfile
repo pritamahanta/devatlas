@@ -1,0 +1,4 @@
+# Automatic HTTPS (Let's Encrypt) for the domain in $DOMAIN.
+{$DOMAIN} {
+	reverse_proxy frontend:80
+}

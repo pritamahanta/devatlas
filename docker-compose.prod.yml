@@ -1,0 +1,37 @@
+# Production overlay. Use together with the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile app up -d --build
+# Needs a .env next to this file (see docs/DEPLOY.md) with DOMAIN and DB_PASSWORD.
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    ports: !reset []        # reachable only on the compose network
+    restart: unless-stopped
+
+  backend:
+    environment:
+      DATABASE_URL: postgresql://devatlas:${DB_PASSWORD:?set DB_PASSWORD in .env}@db:5432/devatlas
+    ports: !reset []
+    restart: unless-stopped
+
+  frontend:
+    ports: !reset []
+    restart: unless-stopped
+
+  caddy:
+    profiles: ["app"]
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - frontend
+
+volumes:
+  caddy_data:

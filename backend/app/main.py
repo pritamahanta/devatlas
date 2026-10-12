@@ -3,9 +3,12 @@ from dataclasses import asdict
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 
+from .answer import answer_question
 from .db import get_conn
 from .embeddings import get_embedder
+from .llm import LLMError, LLMNotConfigured
 from .retrieval import get_repo_id, search
 
 SNIPPET_CHARS = 800
@@ -58,3 +61,22 @@ def search_endpoint(
         d["snippet"] = d.pop("content")[:SNIPPET_CHARS]
         out.append(d)
     return {"repo": repo, "query": q, "mode": mode, "hits": out}
+
+
+class AskRequest(BaseModel):
+    repo: str
+    question: str = Field(min_length=1, max_length=2000)
+    k: int = Field(8, ge=1, le=20)
+    mode: Literal["hybrid", "vector", "keyword", "symbol"] = "hybrid"
+
+
+@app.post("/ask")
+def ask(req: AskRequest):
+    try:
+        return answer_question(req.repo, req.question, req.k, req.mode)
+    except KeyError:
+        raise HTTPException(404, f"repo not found: {req.repo}")
+    except LLMNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except LLMError as e:
+        raise HTTPException(502, f"LLM error: {e}")

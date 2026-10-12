@@ -13,6 +13,7 @@ from typing import Iterator
 
 from git import Repo
 
+from .baseline import DEFAULT_OVERLAP, DEFAULT_WINDOW, FIXED_SUFFIX, chunk_fixed
 from .chunker import Chunk, chunk_python
 from .db import get_conn
 from .docs import chunk_markdown, chunk_plain
@@ -77,8 +78,11 @@ def iter_source_files(root: Path, stats: Counter | None = None) -> Iterator[tupl
             yield full.relative_to(root).as_posix(), lang, text
 
 
-def chunk_file(path: str, language: str, text: str) -> list[Chunk]:
+def chunk_file(path: str, language: str, text: str, chunker: str = "ast",
+               window: int = DEFAULT_WINDOW, overlap: int = DEFAULT_OVERLAP) -> list[Chunk]:
     if language == "python":
+        if chunker == "fixed":   # evaluation baseline; docs/config stay identical in both arms
+            return chunk_fixed(text, path, window, overlap)
         return chunk_python(text, path)
     if language == "markdown":
         return chunk_markdown(text, path)
@@ -110,14 +114,21 @@ def open_source(source: str) -> tuple[Path, str | None, str, str | None]:
     return dest, repo.head.commit.hexsha, name, source
 
 
-def ingest(source: str, name: str | None = None) -> dict:
+def ingest(source: str, name: str | None = None, chunker: str = "ast",
+           window: int = DEFAULT_WINDOW, overlap: int = DEFAULT_OVERLAP) -> dict:
+    """chunker='ast' is the real indexer. chunker='fixed' builds the evaluation
+    baseline (Python files only) and stores it as '<name>@fixed'."""
+    if chunker not in ("ast", "fixed"):
+        raise ValueError("chunker must be 'ast' or 'fixed'")
     root, sha, default_name, url = open_source(source)
     name = name or default_name
+    if chunker == "fixed":
+        name += FIXED_SUFFIX
     stats: Counter = Counter()
 
     parsed = []
     for rel, lang, text in iter_source_files(root, stats):
-        parsed.append((rel, lang, text, chunk_file(rel, lang, text)))
+        parsed.append((rel, lang, text, chunk_file(rel, lang, text, chunker, window, overlap)))
 
     kinds: Counter = Counter()
     n_symbols = n_refs = 0
@@ -160,7 +171,7 @@ def ingest(source: str, name: str | None = None) -> dict:
                         )
                         n_refs += 1
     return {
-        "repo": name, "repo_id": repo_id, "commit": sha, "files": len(parsed),
+        "repo": name, "repo_id": repo_id, "commit": sha, "chunker": chunker, "files": len(parsed),
         "chunks": sum(kinds.values()), "by_kind": dict(kinds),
         "symbols": n_symbols, "refs": n_refs, "skipped": dict(stats),
     }

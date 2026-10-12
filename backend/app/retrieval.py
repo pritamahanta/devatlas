@@ -13,7 +13,7 @@ from .embeddings import get_embedder
 from .textutil import STOPWORDS, split_identifier
 
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-MODES = ("hybrid", "vector", "keyword", "symbol")
+MODES = ("hybrid", "vector", "keyword", "symbol", "vector+keyword")  # last: RRF without symbol lookup
 
 
 @dataclass

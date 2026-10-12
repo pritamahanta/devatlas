@@ -27,3 +27,15 @@ uvicorn app.main:app --reload   # API on :8000, docs at /docs
 # 3. frontend
 cd ../frontend && npm install && npm run dev   # UI on http://localhost:5173
 ```
+
+## Evaluate it
+
+Retrieval-only benchmark (hit@k / MRR, AST vs fixed-size chunking, vector vs keyword vs hybrid).
+See [eval/README.md](eval/README.md) for the workflow and labelling rules.
+
+```bash
+python ingest_repo.py ~/eval-repos/flask --name flask --embed
+python ingest_repo.py ~/eval-repos/flask --name flask --chunker fixed --embed
+python validate_golden.py ../eval/golden.example.jsonl --show
+python eval_retrieval.py ../eval/golden.example.jsonl --misses
+```

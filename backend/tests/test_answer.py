@@ -154,6 +154,52 @@ def test_gemini_client(monkeypatch):
         GeminiLLM("KEY", "m").complete("s", "u")
 
 
+@pytest.fixture(autouse=True)
+def _no_backoff(monkeypatch):
+    monkeypatch.setattr(settings, "llm_retry_backoff_s", 0.0)
+
+
+def test_retries_transient_503_then_succeeds(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append(1)
+        if len(calls) < 3:
+            return _resp(503, {"error": {"status": "UNAVAILABLE"}})
+        return _resp(200, {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    assert GeminiLLM("K", "m").complete("s", "u") == "ok"
+    assert len(calls) == 3
+
+
+def test_gives_up_after_max_retries_on_503(monkeypatch):
+    calls = []
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: calls.append(1) or _resp(503, {"e": 1}))
+    with pytest.raises(LLMError, match="503"):
+        GeminiLLM("K", "m").complete("s", "u")
+    assert len(calls) == settings.llm_max_retries + 1
+
+
+def test_no_retry_on_client_error_or_read_timeout(monkeypatch):
+    calls = []
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: calls.append(1) or _resp(401, {"e": 1}))
+    with pytest.raises(LLMError, match="401"):
+        AnthropicLLM("K", "m").complete("s", "u")
+    assert len(calls) == 1
+
+    calls.clear()
+
+    def timeout(*a, **k):
+        calls.append(1)
+        raise httpx.ReadTimeout("The read operation timed out")
+
+    monkeypatch.setattr(httpx, "post", timeout)
+    with pytest.raises(LLMError, match="timed out"):
+        GeminiLLM("K", "m").complete("s", "u")
+    assert len(calls) == 1
+
+
 def test_gemini_thinking_disabled_only_for_flash(monkeypatch):
     seen = []
 

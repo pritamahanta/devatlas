@@ -1,6 +1,7 @@
 """Minimal LLM clients over plain HTTPS (httpx), so providers are swappable."""
 from __future__ import annotations
 
+import time
 from typing import Callable, Protocol
 
 import httpx
@@ -24,6 +25,31 @@ class LLM(Protocol):
     def complete(self, system: str, user: str) -> str: ...
 
 
+# Temporary provider-side failures (overload / rate limit / 5xx). Read timeouts are
+# deliberately NOT retried: each one already costs llm_timeout_s, and the proxy in front
+# of the backend (nginx, 90 s) would cut a second attempt off.
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _post_with_retry(provider: str, url: str, body: dict, headers: dict) -> httpx.Response:
+    attempts = settings.llm_max_retries + 1
+    for i in range(attempts):
+        last = i + 1 == attempts
+        try:
+            r = httpx.post(url, json=body, headers=headers,
+                           timeout=httpx.Timeout(settings.llm_timeout_s, connect=10.0))
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            if last:
+                raise LLMError(f"{provider} request failed: {e}") from e
+        except httpx.HTTPError as e:
+            raise LLMError(f"{provider} request failed: {e}") from e
+        else:
+            if r.status_code not in RETRYABLE_STATUS or last:
+                return r
+        time.sleep(settings.llm_retry_backoff_s * (2 ** i))
+    raise AssertionError("unreachable")  # the loop always returns or raises on the last attempt
+
+
 class GeminiLLM:
     def __init__(self, api_key: str, model: str):
         self.api_key, self.model = api_key, model
@@ -41,11 +67,7 @@ class GeminiLLM:
         if self.model.startswith("gemini-2.5-flash") and settings.gemini_thinking_budget >= 0:
             body["generationConfig"]["thinkingConfig"] = {
                 "thinkingBudget": settings.gemini_thinking_budget}
-        try:
-            r = httpx.post(url, json=body, headers={"x-goog-api-key": self.api_key},
-                           timeout=httpx.Timeout(settings.llm_timeout_s, connect=10.0))
-        except httpx.HTTPError as e:
-            raise LLMError(f"gemini request failed: {e}") from e
+        r = _post_with_retry("gemini", url, body, {"x-goog-api-key": self.api_key})
         if r.status_code >= 400:
             raise LLMError(f"gemini {r.status_code}: {r.text[:300]}")
         try:
@@ -70,11 +92,7 @@ class AnthropicLLM:
             "messages": [{"role": "user", "content": user}],
         }
         headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
-        try:
-            r = httpx.post("https://api.anthropic.com/v1/messages", json=body,
-                           headers=headers, timeout=settings.llm_timeout_s)
-        except httpx.HTTPError as e:
-            raise LLMError(f"anthropic request failed: {e}") from e
+        r = _post_with_retry("anthropic", "https://api.anthropic.com/v1/messages", body, headers)
         if r.status_code >= 400:
             raise LLMError(f"anthropic {r.status_code}: {r.text[:300]}")
         try:

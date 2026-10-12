@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     max_context_chars: int = 24000      # prompt budget for retrieved excerpts
     max_output_tokens: int = 2048
     llm_timeout_s: float = 60.0
+    llm_max_retries: int = 2            # extra attempts on 429/5xx/connect errors
+    llm_retry_backoff_s: float = 1.0    # waits 1s, 2s, ... between attempts
     gemini_thinking_budget: int = 0     # gemini-2.5-flash only; 0 = off, -1 = don't send the field
 
 

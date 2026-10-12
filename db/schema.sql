@@ -13,7 +13,8 @@ CREATE TABLE files (
     repo_id     INT REFERENCES repos(id) ON DELETE CASCADE,
     path        TEXT NOT NULL,
     language    TEXT,
-    line_count  INT
+    line_count  INT,
+    content     TEXT           -- full file text, served to the code viewer
 );
 
 CREATE TABLE chunks (

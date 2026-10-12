@@ -80,3 +80,18 @@ def ask(req: AskRequest):
         raise HTTPException(503, str(e))
     except LLMError as e:
         raise HTTPException(502, f"LLM error: {e}")
+
+
+@app.get("/file")
+def file_endpoint(repo: str, path: str):
+    """Full text of an indexed file (served from the database, never the disk)."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT f.path, f.language, f.line_count, f.content FROM files f "
+            "JOIN repos r ON r.id = f.repo_id WHERE r.name = %s AND f.path = %s", (repo, path)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(404, f"file not found in {repo}: {path}")
+    if row[3] is None:
+        raise HTTPException(404, "file content not stored; re-ingest this repo")
+    return {"path": row[0], "language": row[1], "line_count": row[2], "content": row[3]}

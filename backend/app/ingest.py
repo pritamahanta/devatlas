@@ -117,7 +117,7 @@ def ingest(source: str, name: str | None = None) -> dict:
 
     parsed = []
     for rel, lang, text in iter_source_files(root, stats):
-        parsed.append((rel, lang, text.count("\n") + 1, chunk_file(rel, lang, text)))
+        parsed.append((rel, lang, text, chunk_file(rel, lang, text)))
 
     kinds: Counter = Counter()
     n_symbols = n_refs = 0
@@ -128,11 +128,11 @@ def ingest(source: str, name: str | None = None) -> dict:
                 "INSERT INTO repos (name, url, commit_sha) VALUES (%s,%s,%s) RETURNING id",
                 (name, url, sha),
             ).fetchone()[0]
-            for rel, lang, n_lines, chunks in parsed:
+            for rel, lang, text, chunks in parsed:
                 file_id = conn.execute(
-                    "INSERT INTO files (repo_id, path, language, line_count) "
-                    "VALUES (%s,%s,%s,%s) RETURNING id",
-                    (repo_id, rel, lang, n_lines),
+                    "INSERT INTO files (repo_id, path, language, line_count, content) "
+                    "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+                    (repo_id, rel, lang, text.count("\n") + 1, text),
                 ).fetchone()[0]
                 for c in chunks:
                     chunk_id = conn.execute(

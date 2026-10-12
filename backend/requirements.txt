@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 psycopg[binary,pool]
 pgvector
+numpy
 pydantic-settings
 tree-sitter>=0.22
 tree-sitter-python>=0.21
